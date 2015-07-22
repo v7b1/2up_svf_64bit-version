@@ -11,7 +11,7 @@ Also 2up_svf~ samples its Q and frequency control signals, if connected, every 1
 
 
 
-This is an update of the original code to the lates MaxSDK and consequently to a true 64 bit version.
+This is an update of the original code to the latest MaxSDK and consequently to a true 64 bit version.
 
 Volker Böhm
 http://vboehm.net
