@@ -23,17 +23,17 @@ static t_class* svf_class = nullptr;
 typedef struct _svf
 {
 	t_pxobject x_obj;
-	t_double freq;
-	t_double q;
+	double freq;
+	double q;
 	int mode;
 	long freq_connected;	// is freq. lead connected to signal?
 	long q_connected;		// how about q?
-	t_double b0;
-	t_double b1;
-	t_double b2;
-	t_double fs;
-	t_double one_over_fs;
-	t_double qc;
+	double b0;
+	double b1;
+	double b2;
+	double fs;
+	double one_over_fs;
+	double qc;
 } t_svf;
 
 
@@ -43,7 +43,6 @@ void svf_freq(t_svf *x, double f);
 void svf_q(t_svf *x, double f);
 void svf_mode(t_svf *x, long n);
 void svf_clear(t_svf *x);
-void svf_dsp(t_svf *x, t_signal **sp, short *count);
 void svf_assist(t_svf *x, void *b, long m, long a, char *s);
 
 // 64bit DSP methods
@@ -57,7 +56,7 @@ void svf_perform64(t_svf *x, t_object *dsp64, double **ins, long numins,
 
 void *svf_new(t_symbol *s, long ac, t_atom *av)
 {
-    t_svf *x = object_alloc(svf_class);
+    t_svf *x = (t_svf*)object_alloc(svf_class);
     if(x) {
         dsp_setup((t_pxobject*)x, 3);            // one signal inlet
         outlet_new((t_pxobject*)x, "signal");
@@ -153,8 +152,9 @@ void svf_dsp64(t_svf *x, t_object *dsp64, short *count, double samplerate,
 	// clear filter history
 	x->b0 = x->b1 = x->b2 = 0.;
 	
-	object_method(dsp64, gensym("dsp_add64"), x, svf_perform64, 0, NULL);
-
+//    object_method(dsp64, gensym("dsp_add64"), x, svf_perform64, 0, NULL);
+    object_method_direct(void, (t_object*, t_object*, t_perfroutine64, long, void*),
+                         dsp64, gensym("dsp_add64"), (t_object*)x, (t_perfroutine64)svf_perform64, 0, NULL);
 }
 
 
@@ -163,32 +163,6 @@ inline double sin_e(double x)
 {
     return x - (x*x*x*0.1666666666666);
 }
-
-
-void calc_params(t_svf *x, t_int *w, int offset, double * pm_f, double * p_q);
-void calc_params(t_svf *x, t_int *w, int offset, double * pm_f, double * p_q)
-{
-	double lq, fs, fc;
-	double oversample = 1.0 / 2.0; // 1/2 = 2x
-	fs = x->fs;
-	fc = x->freq_connected ? ((float *)w[3])[offset] : x->freq;
-	lq = (x->q_connected ? ((float *)w[4])[offset] : x->q);
-	
-	//if (fc > fs*0.5) fc = fs*0.5;
-	//if (fc < 0) fc = 0;
-	fc = CLAMP(fc, 0, fs*0.5);
-	lq = 0.99 - lq;
-	//if (lq > 0.7) lq = 0.7;	// by experiment, prevent blowups at high fc and low q
-	//if (lq < -0.01) lq = -0.01; 
-	lq = CLAMP(lq, -0.01, 0.7);
-	*p_q = lq;
-	*pm_f     = 2.0 * sin_e(PI*fc*x->one_over_fs * oversample);	
-    
-	// coeff for one-pole
-	x->qc = (lq + 0.02)*40000.*x->one_over_fs;
-}
-
-
 
 
 
@@ -200,12 +174,12 @@ void calc_paramsD(t_svf *x, double **ins, int offset, double * pm_f, double * p_
 	fs = x->fs;
 	fc = x->freq_connected ? ins[1][offset] : x->freq;
 	lq = x->q_connected ? ins[2][offset] : x->q;
-	
-	fc = CLAMP(fc, 0, fs*0.5);
+
+	fc = clamp(fc, 0.0, fs*0.5);
 	lq = 0.99 - lq; 
-	lq = CLAMP(lq, -0.01, 0.7);
+	lq = clamp(lq, -0.01, 0.7);
 	*p_q = lq;
-	*pm_f     = 2.0 * sin_e(PI*fc*x->one_over_fs * oversample);	
+	*pm_f     = 2.0 * sin_e(M_PI*fc*x->one_over_fs * oversample);	
     
 	// coeff for one-pole
 	x->qc = (lq + 0.02)*40000.*x->one_over_fs;
@@ -216,8 +190,8 @@ void calc_paramsD(t_svf *x, double **ins, int offset, double * pm_f, double * p_
 void svf_perform64(t_svf *x, t_object *dsp64, double **ins, long numins, 
 					   double **outs, long numouts, long sampleframes, long flags, void *userparam) {
 	
-	t_double *p_in = ins[0];
-	t_double *p_out = outs[0];	
+	double *p_in = ins[0];
+	double *p_out = outs[0];
 	int n = sampleframes;		
 	int i = 0;
 	int do_signal_params = 0;
@@ -229,9 +203,9 @@ void svf_perform64(t_svf *x, t_object *dsp64, double **ins, long numins,
 	static const double denorm_noise[3] = {1e-10, 0, -1e-10};
 	long nk = 0;
 	
-	t_double in, m_in, wc; 
-	t_double m_h, m_b, m_l; 
-	t_double m_f, q;
+	double in, m_in, wc;
+	double m_h, m_b, m_l;
+	double m_f, q;
 	
 	do_signal_params = x->freq_connected || x->q_connected;
 	if (!do_signal_params)
